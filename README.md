@@ -48,6 +48,6 @@ Acknowledgements
 We would like to thank the contributors and open-source community for their valuable contributions and support.
 Contact
 
-For questions, suggestions, or collaborations, please contact us at felipe@castroquiles.com
+For questions, suggestions, or collaborations, please contact us at felipe@castroquiles.com and let's build the future you want.
 
 
