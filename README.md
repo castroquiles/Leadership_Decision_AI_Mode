@@ -50,5 +50,4 @@ Contact
 
 For questions, suggestions, or collaborations, please contact us at felipe@castroquiles.com
 
-vbnet
 
