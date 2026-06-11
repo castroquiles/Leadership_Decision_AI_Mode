@@ -4,6 +4,7 @@ Run locally:  streamlit run app.py
 Deploy free:  https://streamlit.io/cloud
 """
 
+import io
 import numpy as np
 import streamlit as st
 import pandas as pd
@@ -16,6 +17,41 @@ from sklearn.metrics import classification_report
 from sklearn.preprocessing import StandardScaler
 
 # ─────────────────────────────────────────────
+# LOGIN
+# ─────────────────────────────────────────────
+CREDENTIALS = {
+    "admin": "leadership2024",
+    "demo":  "demo123",
+}
+
+def check_login():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+
+    if st.session_state.authenticated:
+        return True
+
+    st.set_page_config(page_title="Login — Leadership Decision AI", page_icon="🔒", layout="centered")
+    st.title("🔒 Leadership Decision AI")
+    st.subheader("Please log in to continue")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Log in"):
+        if username in CREDENTIALS and CREDENTIALS[username] == password:
+            st.session_state.authenticated = True
+            st.session_state.username = username
+            st.rerun()
+        else:
+            st.error("Incorrect username or password.")
+
+    return False
+
+if not check_login():
+    st.stop()
+
+# ─────────────────────────────────────────────
 # PAGE CONFIG
 # ─────────────────────────────────────────────
 st.set_page_config(
@@ -24,11 +60,19 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 Leadership Decision AI Model")
-st.caption("Visualize decision patterns, model performance, and live predictions.")
+col_title, col_logout = st.columns([8, 1])
+with col_title:
+    st.title("🧠 Leadership Decision AI Model")
+    st.caption("Visualize decision patterns, model performance, and live predictions.")
+with col_logout:
+    st.write("")
+    st.write("")
+    if st.button("Log out"):
+        st.session_state.authenticated = False
+        st.rerun()
 
 # ─────────────────────────────────────────────
-# DATA + MODEL (cached so it only runs once)
+# DATA + MODEL
 # ─────────────────────────────────────────────
 @st.cache_data
 def load_data(n_samples=300):
@@ -54,16 +98,13 @@ def train_models(df):
     feature_cols = ["urgency_score","stakeholder_count","data_availability","political_risk","resource_cost"]
     X = df[feature_cols].values
     y = df["impact"].values
-
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     clf = RandomForestClassifier(n_estimators=100, random_state=42)
     clf.fit(X_train, y_train)
-
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
     kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
     kmeans.fit(X_scaled)
-
     return clf, kmeans, scaler, X_test, y_test, feature_cols
 
 df = load_data()
@@ -147,25 +188,25 @@ report_df = pd.DataFrame(report).transpose().round(2)
 st.dataframe(report_df, use_container_width=True)
 
 # ─────────────────────────────────────────────
-# SECTION 6 — LIVE PREDICTION
+# SECTION 6 — LIVE PREDICTION + CSV EXPORT
 # ─────────────────────────────────────────────
 st.header("🎯 Predict a New Decision")
 st.write("Adjust the sliders and see the model's prediction in real time.")
 
 col_a, col_b = st.columns(2)
 with col_a:
-    urgency     = st.slider("Urgency Score",       0.0, 10.0, 5.0, 0.1)
+    urgency      = st.slider("Urgency Score",      0.0, 10.0, 5.0, 0.1)
     stakeholders = st.slider("Stakeholder Count",  1,   20,   10)
-    data_avail  = st.slider("Data Availability",   0.0, 10.0, 5.0, 0.1)
+    data_avail   = st.slider("Data Availability",  0.0, 10.0, 5.0, 0.1)
 with col_b:
-    pol_risk    = st.slider("Political Risk",       0.0, 10.0, 5.0, 0.1)
-    res_cost    = st.slider("Resource Cost",        0.0, 10.0, 5.0, 0.1)
+    pol_risk     = st.slider("Political Risk",      0.0, 10.0, 5.0, 0.1)
+    res_cost     = st.slider("Resource Cost",       0.0, 10.0, 5.0, 0.1)
 
 input_data = np.array([[urgency, stakeholders, data_avail, pol_risk, res_cost]])
-prediction = clf.predict(input_data)[0]
+prediction  = clf.predict(input_data)[0]
 probability = clf.predict_proba(input_data)[0]
-confidence = max(probability) * 100
-label = "🔴 High Impact" if prediction == 1 else "🟢 Low Impact"
+confidence  = max(probability) * 100
+label       = "🔴 High Impact" if prediction == 1 else "🟢 Low Impact"
 
 st.subheader(f"Prediction: {label}")
 st.progress(int(confidence))
@@ -179,10 +220,65 @@ fig_gauge = go.Figure(go.Indicator(
         "axis": {"range": [0, 100]},
         "bar": {"color": "#EF553B"},
         "steps": [
-            {"range": [0, 40], "color": "#d4edda"},
+            {"range": [0, 40],  "color": "#d4edda"},
             {"range": [40, 70], "color": "#fff3cd"},
-            {"range": [70, 100], "color": "#f8d7da"},
+            {"range": [70, 100],"color": "#f8d7da"},
         ],
     }
 ))
 st.plotly_chart(fig_gauge, use_container_width=True)
+
+# ─────────────────────────────────────────────
+# SECTION 7 — CSV EXPORT
+# ─────────────────────────────────────────────
+st.header("📥 Export Predictions to CSV")
+st.write("Log this prediction or export the full dataset with predictions.")
+
+# Add current prediction to session log
+if "prediction_log" not in st.session_state:
+    st.session_state.prediction_log = []
+
+if st.button("➕ Add current prediction to log"):
+    st.session_state.prediction_log.append({
+        "urgency_score":     urgency,
+        "stakeholder_count": stakeholders,
+        "data_availability": data_avail,
+        "political_risk":    pol_risk,
+        "resource_cost":     res_cost,
+        "prediction":        "High Impact" if prediction == 1 else "Low Impact",
+        "confidence_pct":    round(confidence, 1),
+    })
+    st.success("Added to log.")
+
+if st.session_state.prediction_log:
+    log_df = pd.DataFrame(st.session_state.prediction_log)
+    st.dataframe(log_df, use_container_width=True)
+
+    csv_bytes = log_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="⬇️ Download prediction log as CSV",
+        data=csv_bytes,
+        file_name="prediction_log.csv",
+        mime="text/csv"
+    )
+
+    if st.button("🗑️ Clear log"):
+        st.session_state.prediction_log = []
+        st.rerun()
+else:
+    st.info("No predictions logged yet. Use the sliders above and click 'Add current prediction to log'.")
+
+# Export full synthetic dataset with predictions
+st.subheader("Export Full Dataset")
+full_df = df.copy()
+full_df["predicted_impact"] = clf.predict(full_df[feature_cols].values)
+full_df["predicted_impact"] = full_df["predicted_impact"].map({0: "Low Impact", 1: "High Impact"})
+full_df["impact_label"]     = full_df["impact"].map({0: "Low Impact", 1: "High Impact"})
+
+full_csv = full_df.to_csv(index=False).encode("utf-8")
+st.download_button(
+    label="⬇️ Download full dataset with predictions as CSV",
+    data=full_csv,
+    file_name="full_predictions.csv",
+    mime="text/csv"
+)
